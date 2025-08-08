@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JWT-Redis 用户认证系统</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        width: 100%;
+        max-width: 400px;
+        margin: 20px;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 24px;
+        margin-bottom: 10px;
+      }
+
+      .header p {
+        opacity: 0.9;
+        font-size: 14px;
+      }
+
+      .form-container {
+        padding: 30px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #333;
+        font-weight: 500;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e1e5e9;
+        border-radius: 10px;
+        font-size: 14px;
+        transition: border-color 0.3s ease;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 15px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-secondary {
+        background: #f8f9fa;
+        color: #667eea;
+        border: 2px solid #667eea;
+      }
+
+      .btn-secondary:hover {
+        background: #667eea;
+        color: white;
+      }
+
+      .toggle-form {
+        text-align: center;
+        margin-top: 20px;
+      }
+
+      .toggle-form a {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 500;
+      }
+
+      .toggle-form a:hover {
+        text-decoration: underline;
+      }
+
+      .alert {
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+      }
+
+      .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .alert-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .user-info {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+      }
+
+      .user-info h3 {
+        color: #333;
+        margin-bottom: 10px;
+      }
+
+      .user-info p {
+        color: #666;
+        margin-bottom: 5px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+
+      /* .spinner 相关样式和动画已移除 */
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>JWT-Redis 认证系统</h1>
+        <p>安全可靠的用户认证平台</p>
+      </div>
+
+      <div class="form-container">
+        <!-- 登录表单 -->
+        <form id="loginForm" class="auth-form" autocomplete="off" novalidate>
+          <div class="alert hidden" id="loginAlert"></div>
+
+          <div class="form-group">
+            <label for="loginUsername">用户名</label>
+            <input
+              type="text"
+              id="loginUsername"
+              name="username"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="loginPassword">密码</label>
+            <input
+              type="password"
+              id="loginPassword"
+              name="password"
+              autocomplete="off"
+            />
+          </div>
+
+          <button type="button" class="btn btn-primary" id="loginBtn">
+            <span class="btn-text">登录</span>
+          </button>
+
+          <div class="toggle-form">
+            <a href="#" onclick="toggleForm('register')"
+              >还没有账号？立即注册</a
+            >
+          </div>
+        </form>
+
+        <!-- 注册表单 -->
+        <form
+          id="registerForm"
+          class="auth-form hidden"
+          autocomplete="off"
+          novalidate
+        >
+          <div class="alert hidden" id="registerAlert"></div>
+
+          <div class="form-group">
+            <label for="registerUsername">用户名</label>
+            <input
+              type="text"
+              id="registerUsername"
+              name="username"
+              autocomplete="off"
+              minlength="3"
+              maxlength="20"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="registerEmail">邮箱</label>
+            <input
+              type="email"
+              id="registerEmail"
+              name="email"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="registerPassword">密码</label>
+            <input
+              type="password"
+              id="registerPassword"
+              name="password"
+              autocomplete="off"
+              minlength="6"
+            />
+          </div>
+
+          <button type="button" class="btn btn-primary" id="registerBtn">
+            <span class="btn-text">注册</span>
+          </button>
+
+          <div class="toggle-form">
+            <a href="#" onclick="toggleForm('login')">已有账号？立即登录</a>
+          </div>
+        </form>
+
+        <!-- 用户信息面板 -->
+        <div id="userPanel" class="hidden">
+          <div class="user-info">
+            <h3>用户信息</h3>
+            <p><strong>ID:</strong> <span id="userId"></span></p>
+            <p><strong>用户名:</strong> <span id="userUsername"></span></p>
+            <p><strong>邮箱:</strong> <span id="userEmail"></span></p>
+            <p><strong>注册时间:</strong> <span id="userCreatedAt"></span></p>
+          </div>
+
+          <div class="form-group">
+            <label for="updateEmail">更新邮箱</label>
+            <input type="email" id="updateEmail" placeholder="输入新邮箱" />
+          </div>
+
+          <button class="btn btn-secondary" onclick="updateProfile()">
+            更新资料
+          </button>
+          <button class="btn btn-primary" onclick="logout()">退出登录</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:8080/api";
+      let currentToken = localStorage.getItem("token");
+
+      // 页面加载时检查登录状态
+      document.addEventListener("DOMContentLoaded", function () {
+        if (currentToken) {
+          showUserPanel();
+          loadUserProfile();
+        }
+      });
+
+      // 切换表单显示
+      function toggleForm(type) {
+        const loginForm = document.getElementById("loginForm");
+        const registerForm = document.getElementById("registerForm");
+        const userPanel = document.getElementById("userPanel");
+
+        if (type === "register") {
+          loginForm.classList.add("hidden");
+          registerForm.classList.remove("hidden");
+          userPanel.classList.add("hidden");
+        } else {
+          registerForm.classList.add("hidden");
+          loginForm.classList.remove("hidden");
+          userPanel.classList.add("hidden");
+        }
+
+        // 清除提示信息
+        clearAlerts();
+      }
+
+      // 显示用户面板
+      function showUserPanel() {
+        document.getElementById("loginForm").classList.add("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+        document.getElementById("userPanel").classList.remove("hidden");
+      }
+
+      // 显示提示信息
+      function showAlert(formId, message, type = "error") {
+        const alert = document.getElementById(formId + "Alert");
+        alert.textContent = message;
+        alert.className = `alert alert-${type}`;
+        alert.classList.remove("hidden");
+      }
+
+      // 清除提示信息
+      function clearAlerts() {
+        document.querySelectorAll(".alert").forEach((alert) => {
+          alert.classList.add("hidden");
+        });
+      }
+
+      // 设置加载状态
+      function setLoading(btnId, loading) {
+        const btn = document.getElementById(btnId);
+        const btnText = btn.querySelector(".btn-text");
+        // spinner 已移除
+
+        if (loading) {
+          btn.classList.add("loading");
+          btnText.classList.add("hidden");
+        } else {
+          btn.classList.remove("loading");
+          btnText.classList.remove("hidden");
+        }
+      }
+
+      // 注册处理
+      document
+        .getElementById("registerBtn")
+        .addEventListener("click", async function () {
+          const username = document.getElementById("registerUsername").value;
+          const email = document.getElementById("registerEmail").value;
+          const password = document.getElementById("registerPassword").value;
+
+          // 表单验证
+          if (!username || !email || !password) {
+            showAlert("register", "请填写所有必填字段");
+            return;
+          }
+
+          if (username.length < 3 || username.length > 20) {
+            showAlert("register", "用户名长度必须在3-20个字符之间");
+            return;
+          }
+
+          if (password.length < 6) {
+            showAlert("register", "密码长度至少6个字符");
+            return;
+          }
+
+          const data = {
+            username: username,
+            email: email,
+            password: password,
+          };
+
+          setLoading("registerBtn", true);
+          clearAlerts();
+
+          try {
+            const response = await fetch(`${API_BASE}/register`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+              showAlert("register", "注册成功！请登录", "success");
+              setTimeout(() => toggleForm("login"), 2000);
+            } else {
+              showAlert("register", result.error || "注册失败");
+            }
+          } catch (error) {
+            showAlert("register", "网络错误，请稍后重试");
+          } finally {
+            setLoading("registerBtn", false);
+          }
+        });
+
+      // 登录处理
+      document
+        .getElementById("loginBtn")
+        .addEventListener("click", async function () {
+          const username = document.getElementById("loginUsername").value;
+          const password = document.getElementById("loginPassword").value;
+
+          // 表单验证
+          if (!username || !password) {
+            showAlert("login", "请填写用户名和密码");
+            return;
+          }
+
+          const data = {
+            username: username,
+            password: password,
+          };
+
+          setLoading("loginBtn", true);
+          clearAlerts();
+
+          try {
+            const response = await fetch(`${API_BASE}/login`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+              currentToken = result.token;
+              localStorage.setItem("token", currentToken);
+              showAlert("login", "登录成功！", "success");
+              setTimeout(() => {
+                showUserPanel();
+                loadUserProfile();
+              }, 1000);
+            } else {
+              showAlert("login", result.error || "登录失败");
+            }
+          } catch (error) {
+            showAlert("login", "网络错误，请稍后重试");
+          } finally {
+            setLoading("loginBtn", false);
+          }
+        });
+
+      // 加载用户资料
+      async function loadUserProfile() {
+        try {
+          const response = await fetch(`${API_BASE}/profile`, {
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+            },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const user = result.user;
+
+            document.getElementById("userId").textContent = user.id;
+            document.getElementById("userUsername").textContent = user.username;
+            document.getElementById("userEmail").textContent = user.email;
+            document.getElementById("userCreatedAt").textContent = new Date(
+              user.created_at
+            ).toLocaleString("zh-CN");
+            document.getElementById("updateEmail").value = user.email;
+          } else {
+            // Token可能已过期
+            logout();
+          }
+        } catch (error) {
+          console.error("加载用户资料失败:", error);
+        }
+      }
+
+      // 更新用户资料
+      async function updateProfile() {
+        const newEmail = document.getElementById("updateEmail").value;
+
+        if (!newEmail) {
+          alert("请输入新邮箱");
+          return;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/profile`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${currentToken}`,
+            },
+            body: JSON.stringify({ email: newEmail }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert("资料更新成功！");
+            loadUserProfile();
+          } else {
+            alert(result.error || "更新失败");
+          }
+        } catch (error) {
+          alert("网络错误，请稍后重试");
+        }
+      }
+
+      // 退出登录
+      async function logout() {
+        try {
+          await fetch(`${API_BASE}/logout`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${currentToken}`,
+            },
+          });
+        } catch (error) {
+          console.error("退出登录请求失败:", error);
+        } finally {
+          localStorage.removeItem("token");
+          currentToken = null;
+          toggleForm("login");
+        }
+      }
+    </script>
+  </body>
+</html>
