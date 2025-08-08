@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"jwtredis/database"
 	"jwtredis/models"
 	"jwtredis/utils"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -114,15 +117,54 @@ func Logout(c *gin.Context) {
 
 // 获取用户资料
 func GetProfile(c *gin.Context) {
-	userID, exists := c.Get("user_id")
+	userId, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未认证"})
 		return
 	}
 
+	userIdVal, ok := userId.(uint)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user_id断言失败"})
+		return
+	}
+
+	//从redis获取
+	val, err := database.RedisClient.Get(c, fmt.Sprintf("userId:%d", userIdVal)).Result()
+	if err == nil {
+		var userStru models.User
+		if err := json.Unmarshal([]byte(val), &userStru); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"user": userStru.ToResponse(),
+		})
+		return
+	}
+
 	var user models.User
-	if err := database.DB.First(&user, userID).Error; err != nil {
+	if err := database.DB.First(&user, userIdVal).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	// 将user置入redis
+	userBytes, err := json.Marshal(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "序列化user失败",
+		})
+		return
+	}
+	if err := database.RedisClient.Set(c, fmt.Sprintf("userId:%d", userIdVal), userBytes, time.Minute).Err(); err != nil {
+		fmt.Println("", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "缓存user失败" + err.Error(),
+		})
 		return
 	}
 
